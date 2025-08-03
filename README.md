@@ -114,6 +114,3 @@ For questions or support, please contact:
 
 - Sarojkumar Lal
 - GitHub: [https://github.com/sarojlal](https://github.com/sarojlal)
-[3] https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/84717059/a8de5e8d-e2cb-4ec3-a9bc-57373534b495/app.py
-[4] https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/84717059/cc712ab3-95a7-4409-949b-bbd778d3d413/Ironclad_Dynamics_Week_13.ipynb
-[5] https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/84717059/eae6fe45-4c06-4dea-ad3e-f7f509983a30/requirements.txt
