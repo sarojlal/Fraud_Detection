@@ -1,27 +1,8 @@
-# Core packages
-pandas==2.2.2
-numpy==1.26.4
-
-# Machine Learning
-scikit-learn==1.4.2
-joblib==1.4.2
-
-# Deep Learning
-tensorflow
+pandas
+numpy
+scikit-learn
+joblib
+streamlit
 keras
-
-# Visualization (optional for local testing or debug)
-matplotlib==3.8.4
-seaborn==0.13.2
-
-# Streamlit for app UI
-streamlit==1.35.0
-
-# SHAP for model explainability (optional in app)
-shap==0.45.0
-
-# Imbalanced data handling (for SMOTE)
-imbalanced-learn==0.12.2
-
-# Other
-scipy==1.13.1
+tensorflow
+scipy
