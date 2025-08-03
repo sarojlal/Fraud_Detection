@@ -8,6 +8,7 @@ from sklearn.ensemble import RandomForestClassifier, IsolationForest
 # ----------------------------
 # Cache model and scaler loading
 # ----------------------------
+
 @st.cache_resource
 def load_models():
     rf = joblib.load("Models/random_forest_model.pkl")
@@ -22,6 +23,7 @@ rf_model, iso_model, autoencoder_model, scaler, feature_columns = load_models()
 # ----------------------------
 # Initialize Streamlit App
 # ----------------------------
+
 st.title("💳 Real-Time Fraud Detection App")
 st.markdown("Upload transaction data and choose a model to predict fraud risk.")
 
@@ -34,11 +36,13 @@ if "feedback_db" not in st.session_state:
 # ----------------------------
 # Upload CSV File
 # ----------------------------
+
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
 
 # ----------------------------
 # Helper: Preprocess input
 # ----------------------------
+
 def preprocess_input_data(df):
     drop_cols = ['cc_num', 'first', 'last', 'street', 'trans_date_trans_time', 'unix_time']
     df = df.drop(columns=[col for col in drop_cols if col in df.columns], errors='ignore')
@@ -55,17 +59,17 @@ def preprocess_input_data(df):
     for col in cat_cols:
         df[col] = le.fit_transform(df[col].astype(str))
 
-    # Align features
+    # Align features to training
     for col in feature_columns:
         if col not in df.columns:
             df[col] = 0
     df = df[feature_columns]
-
     return df
 
 # ----------------------------
 # Helper: Real-time scoring
 # ----------------------------
+
 def real_time_score(model_name, scaled_data):
     if model_name == "Random Forest":
         proba = rf_model.predict_proba(scaled_data)[:, 1]
@@ -75,18 +79,26 @@ def real_time_score(model_name, scaled_data):
     elif model_name == "Isolation Forest":
         preds = iso_model.predict(scaled_data)
         labels = np.where(preds == -1, 1, 0)
-        return pd.DataFrame({"fraud_flag": labels, "risk_score": np.where(labels == 1, 90 + np.random.rand(len(labels)) * 10, np.random.rand(len(labels)) * 40)})
+        # To create a probabilistic score proxy:
+        risk_score = np.where(labels == 1, 90 + np.random.rand(len(labels)) * 10, np.random.rand(len(labels)) * 40)
+        # We don't have explicit probabilities, but approximate one from risk_score scaled 0-1:
+        fraud_probability = risk_score / 100.0
+        return pd.DataFrame({"fraud_flag": labels, "risk_score": risk_score.round(2), "fraud_probability": fraud_probability})
 
     elif model_name == "Autoencoder":
         reconstructed = autoencoder_model.predict(scaled_data)
         mse = np.mean(np.power(scaled_data - reconstructed, 2), axis=1)
         threshold = np.percentile(mse, 95)
         labels = (mse > threshold).astype(int)
-        return pd.DataFrame({"fraud_flag": labels, "risk_score": (mse * 1000).round(2)})
+        risk_score = (mse * 1000).round(2)
+        # Scale MSE to probability approx by normalizing by max
+        fraud_probability = mse / np.max(mse)
+        return pd.DataFrame({"fraud_flag": labels, "risk_score": risk_score, "fraud_probability": fraud_probability})
 
 # ----------------------------
 # Helper: Concept Drift Detection
 # ----------------------------
+
 def detect_drift(current_sample):
     ref = st.session_state.drift_reference
     if ref is None:
@@ -101,36 +113,45 @@ def detect_drift(current_sample):
 # ----------------------------
 # Helper: Feedback Integration
 # ----------------------------
+
 import os
 
 def store_feedback(index, is_fraud):
     if "last_predictions" in st.session_state:
-        row = st.session_state.last_predictions.iloc[[index]].copy()
+        # Make sure that we get the exact full row as shown in app
+        combined_df = st.session_state.last_predictions
+        # Select the row as a DataFrame, preserving all columns
+        row = combined_df.iloc[[index]].copy()
+
+        # Add feedback column
         row["investigator_feedback"] = is_fraud
+
+        # Append to feedback_db in memory
         st.session_state.feedback_db = pd.concat([st.session_state.feedback_db, row], ignore_index=True)
 
-        # Save feedback to CSV file
+        # Save full DataFrame feedback file appending new feedback with all columns
         feedback_file = "investigator_feedback.csv"
         if os.path.exists(feedback_file):
             existing_df = pd.read_csv(feedback_file)
+            # Combine with full columns intact
             updated_df = pd.concat([existing_df, row], ignore_index=True)
         else:
             updated_df = row
+        
         updated_df.to_csv(feedback_file, index=False)
-
         st.success("✔️ Feedback saved and written to investigator_feedback.csv.")
     else:
         st.error("⚠️ Please run prediction first before submitting feedback.")
 
+
 # ----------------------------
 # Main App Logic
 # ----------------------------
+
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
-
     if 'Unnamed: 0' in df.columns:
         df.drop(columns=['Unnamed: 0'], inplace=True)
-
     if "is_fraud" in df.columns:
         df.drop(columns=["is_fraud"], inplace=True)
 
@@ -140,19 +161,21 @@ if uploaded_file:
     st.subheader("🔢 Model Selection")
     model_choice = st.selectbox("Choose a Model", ["Random Forest", "Isolation Forest", "Autoencoder"])
 
-    # Predict if button clicked or no previous prediction
     if st.button("📊 Predict Fraud Risk") or "last_predictions" not in st.session_state:
         result_df = real_time_score(model_choice, scaled_data)
         combined = pd.concat([df.reset_index(drop=True), result_df], axis=1)
         combined = combined.sort_values(by="risk_score", ascending=False)
 
-        # ⬇️ Label if the probability of fraud>0.5
+        # Add true_fraud consistently for all models by thresholding fraud_probability
         if "fraud_probability" in combined.columns:
             combined["true_fraud"] = (combined["fraud_probability"] >= 0.5).astype(int)
+        else:
+            # Fallback: Use fraud_flag if no probabilities
+            combined["true_fraud"] = combined["fraud_flag"]
 
-    st.session_state.last_predictions = combined.copy()
+        st.session_state.last_predictions = combined.copy()
 
-    # Show predictions if available
+    # Only show predictions if available, safely guarding against NameError
     if "last_predictions" in st.session_state:
         combined = st.session_state.last_predictions.copy()
         st.dataframe(combined.head(20))
@@ -188,3 +211,5 @@ if uploaded_file:
         if not st.session_state.feedback_db.empty:
             st.write("Stored Feedback (for retraining later):")
             st.dataframe(st.session_state.feedback_db.tail(5))
+else:
+    st.info("Please upload a CSV file to get started.")
