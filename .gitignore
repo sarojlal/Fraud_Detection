@@ -1,0 +1,18 @@
+# Ignore Python virtual environments
+.venv/
+venv/
+env/
+
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
+
+# Streamlit logs and temporary files
+.streamlit/
+
+# Ignore system files
+.DS_Store
+Thumbs.db
